@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #users-div { position: fixed; right: 100px; width: 200px; min-height: 200px; border: 1px solid black; }
+      #users { list-style-type: none; }
+      #users li { padding: 2px 3px; cursor: pointer; }
+      #users li:hover { color: blue; }
+      .nick_div { position: fixed; bottom: 60px; }
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages li { padding: 5px 10px; }
+      #messages li.info { color: red; }
+      #messages li:nth-child(odd) { background: #eee; }
+    </style>
+  </head>
+  <body>
+    <ul id="messages"></ul>
+    <div id="users-div">
+      <h3>Currently active users:</h3>
+      <ul id="users">
+      </ul>
+    </div>
+    <div class="nick_div">
+      <span>Currently identified as: </span><span id="nick">anon</span>
+      <br />
+      <span>To change your nickname type "nick your_new_nick" in the chat input</span>
+    </div>
+    <form action="">
+      <input id="m" autocomplete="off" /><button>Send</button>
+      <input type="hidden" id="private-id" />
+    </form>
+
+    <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+    <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+      var socket = io();
+      var $messageInput = $('#m');
+
+      $('form').submit(function(){
+        var msg = $messageInput.val();
+        var regexpNick = new RegExp('nick .+');
+        var regexpPriv = new RegExp('.+>.+');
+
+        // check if the user is trying to change his nick
+        if(regexpNick.test(msg))
+        {
+          var nick = msg.substr(5);
+          socket.emit('nick', nick);
+          $('#nick').text(nick);
+        }
+        // or to send a private message
+        else if(regexpPriv.test(msg))
+        {
+          var index = msg.indexOf('::');
+          var target = msg.substr(0, index);
+          socket.emit('private', {'target': target, 'msg': msg});
+        }
+        else
+        {
+          socket.emit('chat message', msg);
+        }
+
+        $messageInput.val('');
+        return false;
+      });
+
+      $messageInput.on('keyup', function(){
+        socket.emit('typing');
+      });
+
+      socket.on('typing', function(obj){
+        // check if the info isn't already there
+        if ($('.' + obj.id + 'typing').length == 0)
+        {
+          $('#messages').append($('<li>').addClass(obj.id + 'typing').html(obj.msg));
+          setTimeout(function () {
+              $('.' + obj.id + 'typing').remove();
+          }, 2000);
+        }
+      });
+
+      socket.on('chat message', function(msg){
+        $('#messages').append($('<li>').html(msg));
+      });
+
+      socket.on('info', function(msg){
+        $('#messages').append($('<li>').addClass('info').html(msg));
+      });
+
+      // active users list
+      socket.on('users', function(users){
+        var $users_list = $('#users');
+        $users_list.find('li').remove();
+
+        // create list of users
+        users.forEach(function(u){
+          $users_list.append($('<li>').attr('id', u.id).html(u.nick).on('click', function(){
+            // handle each click as a private message
+            $messageInput.val($(this).text() + '>' + $messageInput.val());
+            $('#private-id').val($(this).attr('id'));
+          }));
+        });
+      });
+    </script>
+  </body>
+</html>
